@@ -18,8 +18,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef ARPEGGIATOR_PARAM_TYPES_H
 #define ARPEGGIATOR_PARAM_TYPES_H
 
-#include "ParamType.h"
-
 #include "ArpeggiatorParam_enums.h"
 #include "lookup_table.h"
 #include <stdint.h>

@@ -127,4 +127,53 @@ struct numeric_limits <ArpeggiatorPattern>
     }
 };
 
+/// @brief Scale
+enum class Scale: uint8_t
+{
+    _1_1 = 0, // 1/1 Note
+    _1_2, // half note
+    _1_4, // quarter note
+    _1_8, // 1/8th note
+    _1_16, // 1/16th note
+    _1_32, // 1/32nd note
+    NOFENTRIES,
+    MIN = 0,
+    MAX = NOFENTRIES-1
+};
+
+inline Scale& operator++(Scale & arg)
+{
+    return arg = static_cast<Scale>(static_cast<uint8_t>(arg)+1);
+}
+
+inline Scale& operator--(Scale & arg)
+{
+    return arg = static_cast<Scale>(static_cast<uint8_t>(arg)-1);
+}
+
+/**
+@brief Numeric limits of Scale
+*/
+template <>
+struct numeric_limits <Scale>
+{
+    /**
+    @brief Maximum value
+    @result Maximum value of Scale
+    */
+    static constexpr Scale max()
+    {
+        return Scale::MAX;
+    }
+    
+    /**
+    @brief Minimum value
+    @result Minimum value of Scale
+    */
+    static constexpr Scale min()
+    {
+        return Scale::MIN;
+    }
+};
+
 #endif

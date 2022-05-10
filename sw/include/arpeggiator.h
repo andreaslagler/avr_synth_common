@@ -18,10 +18,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef ARPEGGIATOR_H
 #define ARPEGGIATOR_H
 
-#include "ParamType.h"
 #include "ArpeggiatorParam_enums.h"
 #include "ArpeggiatorParamTypes.h"
-#include "MidiTypes.h"
+#include "subject.h"
+//#include "MidiTypes.h"
 #include "Param.h"
 #include "vector_sorted.h"
 #include "clock_divider.h"
@@ -264,7 +264,7 @@ class ArpeggiatorParams
     
     void notify(const ArpeggiatorParam param)
     {
-        m_subjectParamUpdate.notifiyObserver(param, getParam(param));
+        m_subjectParamUpdate.notifyObserver(param, getParam(param));
     }
 
     // Actual arpeggiator parameters
@@ -415,12 +415,12 @@ public ArpeggiatorParams
     
     constexpr void noteOn(const uint8_t note) const
     {
-        m_subjectNoteOn.notifiyObserver(note, getParam(ArpeggiatorParam::VELOCITY));
+        m_subjectNoteOn.notifyObserver(note, getParam(ArpeggiatorParam::VELOCITY));
     }
     
     constexpr void noteOff(const uint8_t note) const
     {
-        m_subjectNoteOff.notifiyObserver(note);
+        m_subjectNoteOff.notifyObserver(note);
     }
     constexpr void noteOff() const
     {

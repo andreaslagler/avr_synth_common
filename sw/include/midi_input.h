@@ -20,7 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "MidiTypes.h"
+#include "midi_types.h"
 #include "lookup_table.h"
 #include "subject.h"
 
@@ -37,24 +37,6 @@ class MidiInput
     constexpr MidiInput() = default;
     
     /**
-    @brief Set MIDI channel. Depending on the MIDI channel mode, only messages for this channel will be parsed
-    @param midiChannel Selected MIDI channel
-    */
-    void setMidiChannel(const MidiChannel midiChannel)
-    {
-        m_midiChannel = midiChannel;
-    }
-
-    /**
-    @brief Set MIDI channel mode. This setting affects how the MIDI input reacts to MIDI messages assigned to different channels
-    @param midiChannelMode Selected MIDI channel mode
-    */
-    void setMidiChannelMode(const MidiChannelMode midiChannelMode)
-    {
-        m_midiChannelMode = midiChannelMode;
-    }
-
-    /**
     @brief Parse a received byte of MIDI data and trigger notifications on complete MIDI messages
     @param rxByte One byte of received MIDI data
     @todo sicher stellen, dass eine message ohne datenbyte nur einmal empfangen wird
@@ -63,10 +45,10 @@ class MidiInput
     void parse(const uint8_t rxByte)
     {
         // Check if received byte is a status byte
-        const MidiStatusByte statusByte {.byte = rxByte};
-        if (statusByte.midiStatusFlag)
+        const MidiStatus status(rxByte);
+        if (status.statusFlag)
         {
-            parseStatusByte(statusByte);
+            parsestatus(status);
         }
         else
         {
@@ -85,7 +67,7 @@ class MidiInput
     - System reset
     @param observer Observer to be registered
     */
-    constexpr void registerObserver(const typename Subject<MidiSysExMessage>::Observer& observer)
+    constexpr void registerObserver(const typename Subject<const MidiSysExMessage &>::Observer& observer)
     {
         m_subjectSysExMessage.registerObserver(observer);
     }
@@ -164,108 +146,55 @@ class MidiInput
     
     private:
 
-    // MIDI commands
-    enum MidiCommand : uint8_t
-    {
-        NOTE_OFF = 0,
-        NOTE_ON,
-        POLY_AFTER_TOUCH,
-        CONTROL_CHANGE,
-        PROGRAM_CHANGE,
-        CHANNEL_AFTER_TOUCH,
-        PITCH_BEND_CHANGE,
-        SYSEX_MESSAGE
-    };
-
-    // MIDI status byte
-    typedef union
-    {
-        uint8_t byte;
-
-        // SysEx Message
-        MidiSysExMessage midiSysExMessage;
-
-        struct
-        {
-            // MIDI channel
-            uint8_t midiChannel : 4;
-
-            // MIDI Command
-            uint8_t midiCommand : 3;
-
-            // MIDI status flag
-            bool midiStatusFlag : 1;
-        };
-    } MidiStatusByte;
-
     // Parse a status byte
-    void parseStatusByte(const MidiStatusByte statusByte)
+    void parsestatus(const MidiStatus status)
     {
-        // Change parser status according to received MIDI command
-        switch (statusByte.midiCommand)
+        m_currentMidiData.status = status;
+        
+        // Change parser state according to received MIDI command
+        switch (status.command)
         {
-            case NOTE_OFF:
-            if (isChannelValid(statusByte.midiChannel))
-            {
-                m_state = NOTE_OFF_STATUS_RECEIVED;
-            }
+            case MidiCommand::NOTE_OFF:
+            m_state = NOTE_OFF_STATUS_RECEIVED;
             break;
             
-            case NOTE_ON:
-            if (isChannelValid(statusByte.midiChannel))
-            {
-                m_state = NOTE_ON_STATUS_RECEIVED;
-            }
+            case MidiCommand::NOTE_ON:
+            m_state = NOTE_ON_STATUS_RECEIVED;
             break;
             
-            case POLY_AFTER_TOUCH:
-            if (isChannelValid(statusByte.midiChannel))
-            {
-                m_state = POLY_AFTER_TOUCH_STATUS_RECEIVED;
-            }
+            case MidiCommand::POLY_AFTER_TOUCH:
+            m_state = POLY_AFTER_TOUCH_STATUS_RECEIVED;
             break;
             
-            case CONTROL_CHANGE:
-            if (isChannelValid(statusByte.midiChannel))
-            {
-                m_state = CONTROL_CHANGE_STATUS_RECEIVED;
-            }
+            case MidiCommand::CONTROL_CHANGE:
+            m_state = CONTROL_CHANGE_STATUS_RECEIVED;
             break;
             
-            case PROGRAM_CHANGE:
-            if (isChannelValid(statusByte.midiChannel))
-            {
-                m_state = PROGRAM_CHANGE_STATUS_RECEIVED;
-            }
+            case MidiCommand::PROGRAM_CHANGE:
+            m_state = PROGRAM_CHANGE_STATUS_RECEIVED;
             break;
             
-            case CHANNEL_AFTER_TOUCH:
-            if (isChannelValid(statusByte.midiChannel))
-            {
-                m_state = CHANNEL_AFTER_TOUCH_STATUS_RECEIVED;
-            }
+            case MidiCommand::CHANNEL_AFTER_TOUCH:
+            m_state = CHANNEL_AFTER_TOUCH_STATUS_RECEIVED;
             break;
             
-            case PITCH_BEND_CHANGE:
-            if (isChannelValid(statusByte.midiChannel))
-            {
-                m_state = PITCH_BEND_CHANGE_STATUS_RECEIVED;
-            }
+            case MidiCommand::PITCH_BEND_CHANGE:
+            m_state = PITCH_BEND_CHANGE_STATUS_RECEIVED;
             break;
             
-            case SYSEX_MESSAGE:
+            case MidiCommand::SYSEX_MESSAGE:
             {
                 // Filter SysEx real-time messages
                 // These types of messages may be transmitted anytime and must not affect the parser output
-                switch (statusByte.byte)
+                switch (status.sysExMessage)
                 {
-                    case static_cast<uint8_t>(MidiSysExMessage::TIMING_CLOCK): // Midi Clock
-                    case static_cast<uint8_t>(MidiSysExMessage::START): // Start Command
-                    case static_cast<uint8_t>(MidiSysExMessage::CONTINUE): // Continue Command
-                    case static_cast<uint8_t>(MidiSysExMessage::STOP): // Stop Command
-                    case static_cast<uint8_t>(MidiSysExMessage::ACTIVE_SENSE): // Active Sensing
-                    case static_cast<uint8_t>(MidiSysExMessage::RESET): // System Reset
-                    m_subjectSysExMessage.notifiyObserver(static_cast<MidiSysExMessage>(statusByte.byte));
+                    case MidiSysExMessage::TIMING_CLOCK: // Midi Clock
+                    case MidiSysExMessage::START: // Start Command
+                    case MidiSysExMessage::CONTINUE: // Continue Command
+                    case MidiSysExMessage::STOP: // Stop Command
+                    case MidiSysExMessage::ACTIVE_SENSE: // Active Sensing
+                    case MidiSysExMessage::RESET: // System Reset
+                    m_subjectSysExMessage.notifyObserver(status.sysExMessage);
                     break;
                     
                     default:
@@ -294,7 +223,7 @@ class MidiInput
 
             case NOTE_OFF_DATA_RECEIVED: // Parser has received the first data byte of a note-off message
             m_currentMidiData.data[1] = byte;
-            m_subjectNoteOff.notifiyObserver(m_currentMidiData.stNoteOff);
+            m_subjectNoteOff.notifyObserver(m_currentMidiData.noteOff);
             m_state = NOTE_OFF_STATUS_RECEIVED; // running status
             break;
 
@@ -305,7 +234,7 @@ class MidiInput
 
             case NOTE_ON_DATA_RECEIVED: // Parser has received the first data byte of a note-on message
             m_currentMidiData.data[1] = byte;
-            m_subjectNoteOn.notifiyObserver(m_currentMidiData.stNoteOn);
+            m_subjectNoteOn.notifyObserver(m_currentMidiData.noteOn);
             m_state = NOTE_ON_STATUS_RECEIVED; // running status
             break;
 
@@ -316,7 +245,7 @@ class MidiInput
 
             case POLY_AFTER_TOUCH_DATA_RECEIVED: // Parser has received the first data byte of a polyphonic aftertouch message
             m_currentMidiData.data[1] = byte;
-            m_subjectPolyAfterTouch.notifiyObserver(m_currentMidiData.stPolyAftertouch);
+            m_subjectPolyAfterTouch.notifyObserver(m_currentMidiData.polyAftertouch);
             m_state = POLY_AFTER_TOUCH_STATUS_RECEIVED;
             break;
 
@@ -327,18 +256,18 @@ class MidiInput
 
             case CONTROL_CHANGE_DATA_RECEIVED: // Parser has received the first data byte of a control change message
             m_currentMidiData.data[1] = byte;
-            m_subjectControlChange.notifiyObserver(m_currentMidiData.stControlChange);
+            m_subjectControlChange.notifyObserver(m_currentMidiData.controlChange);
             m_state = CONTROL_CHANGE_STATUS_RECEIVED;
             break;
 
             case PROGRAM_CHANGE_STATUS_RECEIVED: // Parser has received the status byte of a program change message
             m_currentMidiData.data[0] = byte;
-            m_subjectProgramChange.notifiyObserver(m_currentMidiData.stProgramChange);
+            m_subjectProgramChange.notifyObserver(m_currentMidiData.programChange);
             break;
 
             case CHANNEL_AFTER_TOUCH_STATUS_RECEIVED: // Parser has received the status byte of a channel aftertouch message
             m_currentMidiData.data[0] = byte;
-            m_subjectChannelAfterTouch.notifiyObserver(m_currentMidiData.stChannelAftertouch);
+            m_subjectChannelAfterTouch.notifyObserver(m_currentMidiData.channelAftertouch);
             break;
 
             case PITCH_BEND_CHANGE_STATUS_RECEIVED: // Parser has received the status byte of a pitch-bend message
@@ -348,28 +277,16 @@ class MidiInput
 
             case PITCH_BEND_CHANGE_DATA_RECEIVED: // Parser has received the first data byte of a pitch-bend message
             m_currentMidiData.data[1] = byte;
-            m_subjectPitchBend.notifiyObserver(m_currentMidiData.stPitchBend);
+            m_subjectPitchBend.notifyObserver(m_currentMidiData.pitchBend);
             m_state = PITCH_BEND_CHANGE_STATUS_RECEIVED;
             break;
 
             case SYSEX_MESSAGE_RECEIVED: // Parser has received a SysEx message
+            /// @todo Support SysEx messages
             break;
 
             default:
             break;
-        }
-    }
-    
-    // Check if channel is valid depending on the configured MIDI channel and channel mode
-    bool isChannelValid(const uint8_t midiChannel) const
-    {
-        if (MidiChannelMode::OMNI == m_midiChannelMode || midiChannel == static_cast<uint8_t>(m_midiChannel))
-        {
-            return true;
-        }
-        else
-        {
-            return false;
         }
     }
     
@@ -396,28 +313,28 @@ class MidiInput
     // MIDI data collected during parsing the serial stream
     union
     {
-        // Up to two data bytes
-        uint8_t data[2];
-
-        MidiNoteOff stNoteOff;
-        MidiNoteOn stNoteOn;
-        MidiPolyAfterTouch stPolyAftertouch;
-        MidiControlChange stControlChange;
-        MidiProgramChange stProgramChange;
-        MidiChannelAfterTouch stChannelAftertouch;
-        MidiPitchBend stPitchBend;
-        MidiSysEx stSysEx;
+        struct
+        {
+            // MIDI channel
+            MidiStatus status;
+            
+            // Up to two data bytes
+            uint8_t data[2] = {0,0}; // Make sure MSB is always zero
+        };
+        
+        MidiNoteOff noteOff;
+        MidiNoteOn noteOn;
+        MidiPolyAfterTouch polyAftertouch;
+        MidiControlChange controlChange;
+        MidiProgramChange programChange;
+        MidiChannelAfterTouch channelAftertouch;
+        MidiPitchBend pitchBend;
+        MidiSysEx sysEx;
     }
-    m_currentMidiData {.data = {0,0}};
+    m_currentMidiData;
     
-    // MIDI channel
-    MidiChannel m_midiChannel {MidiChannel::_1};
-    
-    // MIDI channel mode
-    MidiChannelMode m_midiChannelMode {MidiChannelMode::OMNI};
-
     // Subjects for all possible MIDI messages
-    Subject<MidiSysExMessage> m_subjectSysExMessage;
+    Subject<const MidiSysExMessage&> m_subjectSysExMessage;
     Subject<const MidiNoteOff&> m_subjectNoteOff;
     Subject<const MidiNoteOn&> m_subjectNoteOn;
     Subject<const MidiPolyAfterTouch&> m_subjectPolyAfterTouch;
