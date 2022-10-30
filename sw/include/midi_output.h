@@ -56,14 +56,36 @@ class MidiOutput
 
     /**
     @brief Send MIDI control change message to output
+    @param status MIDI status byte
+    @param controller MIDI controller index
+    @param value MIDI controller value
+    */
+    static void writeControlChange(const uint8_t status, const uint8_t controller, const uint8_t value)
+    {
+        Output::put(status);
+        Output::put(controller);
+        Output::put(value);
+    }
+
+    /**
+    @brief Send MIDI control change message to output
+    @param channel Selected MIDI channel for output
+    @param controller MIDI controller index
+    @param value MIDI controller value
+    */
+    static void writeControlChange(const MidiChannel channel, const uint8_t controller, const uint8_t value)
+    {        
+        writeControlChange((MidiStatus {{.channel = channel, .command = MidiCommand::CONTROL_CHANGE, .statusFlag = 1}}).byte, controller, value);
+    }
+
+    /**
+    @brief Send MIDI control change message to output
     @param channel Selected MIDI channel for output
     @param message Structure containing the control change data
     */
     static void write(const MidiControlChange & message)
     {
-        Output::put(message.status.byte);
-        Output::put(message.controller);
-        Output::put(message.value);
+        writeControlChange(message.status.byte, message.controller, message.value);
     }
 
     /**
