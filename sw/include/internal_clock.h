@@ -18,11 +18,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef INTERNAL_CLOCK_H
 #define INTERNAL_CLOCK_H
 
-#include "param.h"
 #include "subject.h"
 #include <stdint.h>
 
-// Internal clock need correct CPU clock for proper timing
+// Internal clock needs correct CPU clock for proper timing
 #ifndef F_CPU
 #warning "internal_clock.h : F_CPU not defined, using default F_CPU = 16MHz"
 #define F_CPU 16000000UL
@@ -47,15 +46,14 @@ class InternalClock : public Subject<void>
         if (0 == --m_clock)
         {
             notifyObserver();
-            m_clock = m_clockDivider;
+            m_clock = m_clockPostDivider;
         }
     }
-    
+           
     /**
-    @brief Calculate clock counter
-    @result Clock counter. This value can be used to set the OCRA register of the associated 16 bit timer
+    @brief Set bpm value
     */
-    constexpr uint16_t calcBpmCounter()
+    constexpr void setBpmParam(const uint8_t bpmParam)
     {
         // Minimum bpm without clock prescaling @ 20 MHz CPU clock, 24 ppqn clock resolution, 16 bit timer resolution
         // 20e6 * (60 / 24) / 65536 = 763 bpm
@@ -63,48 +61,23 @@ class InternalClock : public Subject<void>
         constexpr uint32_t scaledCpuClock = static_cast<uint32_t>((F_CPU * 60) / ppqn);
 
         // Initial value for bpm counter
-        uint32_t bpmCounter = scaledCpuClock / getTrueBpm();
+        const uint16_t bpm = bpmParam + s_minBpm;
+        uint32_t clockDivider = scaledCpuClock / bpm;
         
-        // Split 32bit clock divider into a 16bit and an 8bit clock divider
-        m_clockDivider = (bpmCounter >> 16) + 1;
+        // Split 32bit clock divider into a 16bit clock pre divider and an 8bit clock post divider
+        m_clockPostDivider = (clockDivider >> 16) + 1;
+        m_clockPreDivider = static_cast<uint16_t>(clockDivider / m_clockPostDivider);
         
         // Reset clock
-        m_clock = m_clockDivider;
-        
-        return static_cast<uint16_t>(bpmCounter / m_clockDivider);
-    }
-    
-    /**
-    @brief Increment bpm value
-    @result Incremented bpm value
-    */
-    constexpr uint16_t incBpm(const uint8_t speed = 1)
-    {
-        m_bpm.increase(speed);
-        return getTrueBpm();
-    }
-
-    /**
-    @brief Decrement bpm value
-    @result Decremented bpm value
-    */
-    constexpr uint16_t decBpm(const uint8_t speed = 1)
-    {
-        m_bpm.decrease(speed);
-        return getTrueBpm();
+        m_clock = m_clockPostDivider;
     }
     
     private:
     
-    constexpr uint16_t getTrueBpm() const
-    {
-        return s_minBpm + m_bpm.getValue();
-    }
-    
-    uint8_t m_clockDivider = 1;
+    uint16_t m_clockPreDivider = 1;
+    uint8_t m_clockPostDivider = 1;
     uint8_t m_clock = 1;
     static constexpr uint16_t s_minBpm = 45;
-    Param<uint8_t> m_bpm = 130 - s_minBpm;
 };
 
 #endif
