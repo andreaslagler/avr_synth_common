@@ -20,9 +20,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <optional.h>
 #include "midi_types.h"
-#include "lookup_table.h"
-#include "subject.h"
 
 /**
 @brief MIDI input interface parsing a serial stream of bytes into MIDI messages
@@ -42,112 +41,24 @@ class MidiInput
     @todo sicher stellen, dass eine message ohne datenbyte nur einmal empfangen wird
     @todo SysEx status geht vermutlich verloren!!!
     */
-    void parse(const uint8_t rxByte)
+    Optional<MidiMessage> parse(const uint8_t rxByte)
     {
         // Check if received byte is a status byte
         const MidiStatus status(rxByte);
         if (status.statusFlag)
         {
-            parsestatus(status);
+            return parsestatus(status);
         }
         else
         {
-            parseDataByte(rxByte);
+            return parseDataByte(rxByte);
         }
-    }
-
-    /**
-    @brief Register an observer for MIDI SysEx real-time messages
-    Notified MIDI SysEx real-time messages are:
-    - MIDI clock
-    - START command
-    - CONTINUE command
-    - STOP command
-    - Active sensing
-    - System reset
-    @param observer Observer to be registered
-    */
-    constexpr void registerObserver(const typename Subject<const MidiSysExMessage &>::Observer& observer)
-    {
-        m_subjectSysExMessage.registerObserver(observer);
-    }
-
-    /**
-    @brief Register an observer for MIDI note-off messages
-    @param observer Observer to be registered
-    */
-    constexpr void registerObserver(const typename Subject<const MidiNoteOff&>::Observer& observer)
-    {
-        m_subjectNoteOff.registerObserver(observer);
-    }
-
-    /**
-    @brief Register an observer for MIDI note-on messages
-    @param observer Observer to be registered
-    */
-    constexpr void registerObserver(const typename Subject<const MidiNoteOn&>::Observer& observer)
-    {
-        m_subjectNoteOn.registerObserver(observer);
-    }
-
-    /**
-    @brief Register an observer for MIDI polyphonic aftertouch messages
-    @param observer Observer to be registered
-    */
-    constexpr void registerObserver(const typename Subject<const MidiPolyAfterTouch&>::Observer& observer)
-    {
-        m_subjectPolyAfterTouch.registerObserver(observer);
-    }
-
-    /**
-    @brief Register an observer for MIDI control change messages
-    @param observer Observer to be registered
-    */
-    constexpr void registerObserver(const typename Subject<const MidiControlChange&>::Observer& observer)
-    {
-        m_subjectControlChange.registerObserver(observer);
-    }
-
-    /**
-    @brief Register an observer for MIDI program change messages
-    @param observer Observer to be registered
-    */
-    constexpr void registerObserver(const typename Subject<const MidiProgramChange&>::Observer& observer)
-    {
-        m_subjectProgramChange.registerObserver(observer);
-    }
-
-    /**
-    @brief Register an observer for MIDI channel aftertouch messages
-    @param observer Observer to be registered
-    */
-    constexpr void registerObserver(const typename Subject<const MidiChannelAfterTouch&>::Observer& observer)
-    {
-        m_subjectChannelAfterTouch.registerObserver(observer);
-    }
-
-    /**
-    @brief Register an observer for MIDI pitch-bend messages
-    @param observer Observer to be registered
-    */
-    constexpr void registerObserver(const typename Subject<const MidiPitchBend&>::Observer& observer)
-    {
-        m_subjectPitchBend.registerObserver(observer);
-    }
-
-    /**
-    @brief Register an observer for MIDI SysEx messages
-    @param observer Observer to be registered
-    */
-    constexpr void registerObserver(const typename Subject<const MidiSysEx&>::Observer& observer)
-    {
-        m_subjectSysEx.registerObserver(observer);
     }
     
     private:
 
     // Parse a status byte
-    void parsestatus(const MidiStatus status)
+    Optional<MidiMessage> parsestatus(const MidiStatus status)
     {
         m_currentMidiData.status = status;
         
@@ -194,8 +105,8 @@ class MidiInput
                     case MidiSysExMessage::STOP: // Stop Command
                     case MidiSysExMessage::ACTIVE_SENSE: // Active Sensing
                     case MidiSysExMessage::RESET: // System Reset
-                    m_subjectSysExMessage.notifyObserver(status.sysExMessage);
-                    break;
+                    m_state = SYSEX_MESSAGE_RECEIVED;
+                    return MidiMessage{in_place_type_t<MidiSysExMessage>(),status.sysExMessage};
                     
                     default:
                     m_state = SYSEX_MESSAGE_RECEIVED;
@@ -208,10 +119,12 @@ class MidiInput
             m_state = IDLE;
             break;
         }
+        
+        return Optional<MidiMessage>();
     }
     
     // Parse a data byte
-    void parseDataByte(const uint8_t byte)
+    Optional<MidiMessage> parseDataByte(const uint8_t byte)
     {
         // Received byte is a data byte
         switch (m_state)
@@ -223,9 +136,8 @@ class MidiInput
 
             case NOTE_OFF_DATA_RECEIVED: // Parser has received the first data byte of a note-off message
             m_currentMidiData.data[1] = byte;
-            m_subjectNoteOff.notifyObserver(m_currentMidiData.noteOff);
-            m_state = NOTE_OFF_STATUS_RECEIVED; // running status
-            break;
+            m_state = NOTE_OFF_STATUS_RECEIVED; // Running status
+            return MidiMessage{in_place_type_t<MidiNoteOff>(), m_currentMidiData.noteOff};
 
             case NOTE_ON_STATUS_RECEIVED: // Parser has received the status byte of a note-on message
             m_currentMidiData.data[0] = byte;
@@ -234,9 +146,8 @@ class MidiInput
 
             case NOTE_ON_DATA_RECEIVED: // Parser has received the first data byte of a note-on message
             m_currentMidiData.data[1] = byte;
-            m_subjectNoteOn.notifyObserver(m_currentMidiData.noteOn);
-            m_state = NOTE_ON_STATUS_RECEIVED; // running status
-            break;
+            m_state = NOTE_ON_STATUS_RECEIVED; // Running status
+            return MidiMessage{in_place_type_t<MidiNoteOn>(), m_currentMidiData.noteOn};
 
             case POLY_AFTER_TOUCH_STATUS_RECEIVED: // Parser has received the status byte of a polyphonic aftertouch message
             m_currentMidiData.data[0] = byte;
@@ -245,8 +156,8 @@ class MidiInput
 
             case POLY_AFTER_TOUCH_DATA_RECEIVED: // Parser has received the first data byte of a polyphonic aftertouch message
             m_currentMidiData.data[1] = byte;
-            m_subjectPolyAfterTouch.notifyObserver(m_currentMidiData.polyAftertouch);
-            m_state = POLY_AFTER_TOUCH_STATUS_RECEIVED;
+            m_state = POLY_AFTER_TOUCH_STATUS_RECEIVED; // Running status
+            return MidiMessage{in_place_type_t<MidiPolyAfterTouch>(), m_currentMidiData.polyAftertouch};
             break;
 
             case CONTROL_CHANGE_STATUS_RECEIVED: // Parser has received the status byte of a control change message
@@ -256,18 +167,18 @@ class MidiInput
 
             case CONTROL_CHANGE_DATA_RECEIVED: // Parser has received the first data byte of a control change message
             m_currentMidiData.data[1] = byte;
-            m_subjectControlChange.notifyObserver(m_currentMidiData.controlChange);
-            m_state = CONTROL_CHANGE_STATUS_RECEIVED;
+            m_state = CONTROL_CHANGE_STATUS_RECEIVED; // Running status
+            return MidiMessage{in_place_type_t<MidiControlChange>(), m_currentMidiData.controlChange};
             break;
 
             case PROGRAM_CHANGE_STATUS_RECEIVED: // Parser has received the status byte of a program change message
             m_currentMidiData.data[0] = byte;
-            m_subjectProgramChange.notifyObserver(m_currentMidiData.programChange);
+            return MidiMessage{in_place_type_t<MidiProgramChange>(), m_currentMidiData.programChange};
             break;
 
             case CHANNEL_AFTER_TOUCH_STATUS_RECEIVED: // Parser has received the status byte of a channel aftertouch message
             m_currentMidiData.data[0] = byte;
-            m_subjectChannelAfterTouch.notifyObserver(m_currentMidiData.channelAftertouch);
+            return MidiMessage{in_place_type_t<MidiChannelAfterTouch>(), m_currentMidiData.channelAftertouch};
             break;
 
             case PITCH_BEND_CHANGE_STATUS_RECEIVED: // Parser has received the status byte of a pitch-bend message
@@ -277,7 +188,7 @@ class MidiInput
 
             case PITCH_BEND_CHANGE_DATA_RECEIVED: // Parser has received the first data byte of a pitch-bend message
             m_currentMidiData.data[1] = byte;
-            m_subjectPitchBend.notifyObserver(m_currentMidiData.pitchBend);
+            return MidiMessage{in_place_type_t<MidiPitchBend>(), m_currentMidiData.pitchBend};
             m_state = PITCH_BEND_CHANGE_STATUS_RECEIVED;
             break;
 
@@ -288,6 +199,8 @@ class MidiInput
             default:
             break;
         }
+
+        return Optional<MidiMessage>();
     }
     
     // State of MIDI parser
@@ -332,17 +245,6 @@ class MidiInput
         MidiSysEx sysEx;
     }
     m_currentMidiData;
-    
-    // Subjects for all possible MIDI messages
-    Subject<const MidiSysExMessage&> m_subjectSysExMessage;
-    Subject<const MidiNoteOff&> m_subjectNoteOff;
-    Subject<const MidiNoteOn&> m_subjectNoteOn;
-    Subject<const MidiPolyAfterTouch&> m_subjectPolyAfterTouch;
-    Subject<const MidiControlChange&> m_subjectControlChange;
-    Subject<const MidiProgramChange&> m_subjectProgramChange;
-    Subject<const MidiChannelAfterTouch&> m_subjectChannelAfterTouch;
-    Subject<const MidiPitchBend&> m_subjectPitchBend;
-    Subject<const MidiSysEx&> m_subjectSysEx;
 };
 
 #endif

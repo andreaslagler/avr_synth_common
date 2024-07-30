@@ -21,6 +21,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stdint.h>
 #include <stdbool.h>
 
+#include <variant.h>
+
 // MIDI types used for both MIDI input and output
 
 /// @brief MIDI channel
@@ -83,79 +85,8 @@ enum class MidiSysExMessage : uint8_t
     RESET = 0xFF
 };
 
-/// @brief MIDI status byte
-//class MidiStatus
-//{
-//public:
-//
-//constexpr MidiStatus(const uint8_t byte)
-//:
-//byte(byte)
-//{}
-//
-//constexpr MidiStatus(const MidiChannel channel, const MidiCommand command)
-//:
-//channel(channel),
-//command(command),
-//statusFlag(1)
-//{}
-//
-//constexpr operator const MidiSysExMessage & () const
-//{
-//return sysExMessage;
-//}
-//
-//constexpr operator uint8_t() const
-//{
-//return byte;
-//}
-//
-//constexpr bool getStatusFlag() const
-//{
-//return statusFlag;
-//}
-//
-//constexpr MidiCommand getCommand() const
-//{
-//return command;
-//}
-//
-//private:
-//
-//union
-//{
-//struct
-//{
-//// MIDI channel
-//MidiChannel channel : 4;
-//
-//// MIDI Command
-//MidiCommand command : 3;
-//
-//// MIDI status flag
-//uint8_t statusFlag : 1;
-//};
-//
-//uint8_t byte;
-//MidiSysExMessage sysExMessage;
-//};
-//};
-
-
 union MidiStatus
 {
-    //MidiStatus() = default;
-    //
-    //constexpr MidiStatus(const MidiChannel _channel, const MidiCommand _command)
-    //:
-    //channel(_channel), command(_command), statusFlag(1)
-    //{}
-    //
-    //constexpr MidiStatus(const uint8_t _byte)
-    //:
-    //byte(_byte)
-    //{}
-    //
     struct
     {
         // MIDI channel
@@ -286,6 +217,15 @@ struct MidiSysEx
     uint8_t data;
 };
 
-
+using MidiMessage = Variant<
+MidiNoteOff,
+MidiNoteOn,
+MidiPolyAfterTouch,
+MidiControlChange,
+MidiProgramChange,
+MidiChannelAfterTouch,
+MidiPitchBend,
+MidiSysExMessage,
+MidiSysEx>;
 
 #endif
